@@ -20,7 +20,7 @@ ini_set('display_errors', 1);
         /* Sidebar Styles */
         .app-container {
             display: flex;
-            min-height: 100vh;
+            min-height: 200vh;
         }
         
         .sidebar {
@@ -224,15 +224,15 @@ ini_set('display_errors', 1);
         <!-- Sidebar -->
         <div class="sidebar">
             <div class="sidebar-header">
-                <h2>🏫 Tutorix</h2>
-                <p>School Management System</p>
+                <h2> Tutorix</h2>
+                
             </div>
             <div class="nav-menu">
                 <a href="school-management.php" class="nav-item active">
                     <span class="icon">🏫</span>
                     <span>School Management</span>
                 </a>
-                <a href="school-holidays.php" class="nav-item">
+                <a href="holidays.php" class="nav-item">
                     <span class="icon">📅</span>
                     <span>School Holidays</span>
                 </a>
