@@ -306,7 +306,7 @@ ini_set('display_errors', 1);
     
     <script src="../assets/js/rightpanel.js"></script>
     <script>
-        const API_URL = 'http://localhost/school_management/api/';
+        const API_URL = '../api/';
         let allHolidays = [];
         let currentPageNum = 1;
         const rowsPerPage = 10;
