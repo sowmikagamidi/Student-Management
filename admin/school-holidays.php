@@ -819,7 +819,6 @@ ini_set('display_errors', 1);
         document.getElementById('resetFilterBtn').onclick = () => {
             document.getElementById('filter_school_id').value = '';
             document.getElementById('filter_academic_year').value = '';
-            document.getElementById('filter_board_id').value = '';
             document.getElementById('filter_class_id').value = '';
             loadHolidays();
         };
