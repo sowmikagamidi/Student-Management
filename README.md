@@ -29,11 +29,6 @@ school_management/
 ├── assets/
 ├── config/
 ├── database/
-├── includes/
-├── pages/
-├── index.php
-├── login.php
-├── dashboard.php
 └── README.md
 
 -->  Installation Steps:
