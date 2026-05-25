@@ -90,11 +90,11 @@ try {
             // If financial columns don't exist, try without them
             $sql = "INSERT INTO TX_SCHOOL_LICENCE (
                 licence_type, school_id, class_id, batch_id, subscription_type, subscription_qty, available_qty,
-                joining_date, expiry_date, order_id, created_dtm
+                joining_date, expiry_date, order_id, api_key,created_dtm
             ) VALUES (
                 'lms', $school_id, $class_id, $batch_id_sql,
                 '$subscription_type', $subscription_qty, $available_qty,
-                '$joining_date', '$expiry_date', '$order_id', NOW()
+                '$joining_date', '$expiry_date', '$order_id', '$api_key', NOW()
             )";
 
             if (!$conn->query($sql)) {

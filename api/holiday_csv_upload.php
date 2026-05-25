@@ -34,6 +34,7 @@ $expectedHeaders = ['school_id', 'academic_year', 'board_id', 'class_id', 'holid
 $success_count = 0;
 $failed_count = 0;
 $errors = [];
+$current_year = date('Y');
 
 while (($row = fgetcsv($file)) !== false) {
     $data = array_combine($headers, $row);
@@ -55,6 +56,49 @@ while (($row = fgetcsv($file)) !== false) {
     $holiday_name = $conn->real_escape_string($data['holiday_name']);
     $holiday_type = $data['holiday_type'];
     
+    // Validate board
+    $board_check_sql = "SELECT board_id FROM TX_SCHOOL_DETAILS WHERE school_id = $school_id";
+    $board_result = $conn->query($board_check_sql);
+    if ($board_result && $board_result->num_rows > 0) {
+        $school_data = $board_result->fetch_assoc();
+        $school_board = $school_data['board_id'];
+        $mapped_board = '';
+        if ($school_board == 'C' || $school_board == 'CBSE') $mapped_board = 'C';
+        else if ($school_board == 'I' || $school_board == 'ICSE') $mapped_board = 'I';
+        else if ($school_board == 'W' || $school_board == 'WBBSE') $mapped_board = 'W';
+        else $mapped_board = $school_board;
+        
+        if ($mapped_board != $board_id) {
+            $failed_count++;
+            $errors[] = "Board mismatch for school ID $school_id (has $school_board, tried $board_id)";
+            continue;
+        }
+    } else {
+        $failed_count++;
+        $errors[] = "School ID $school_id not found";
+        continue;
+    }
+    
+    // Validate academic year
+    if (intval($academic_year) < $current_year) {
+        $failed_count++;
+        $errors[] = "Past academic year $academic_year for school $school_id";
+        continue;
+    }
+    
+    // Check duplicate
+    $duplicate_check = "SELECT id FROM TX_SCHOOL_HOLIDAYS 
+                        WHERE school_id = $school_id 
+                        AND (is_deleted = 0 OR is_deleted IS NULL)
+                        AND holiday_date = '$holiday_date'
+                        AND holiday_name = '$holiday_name'";
+    $dup_result = $conn->query($duplicate_check);
+    if ($dup_result && $dup_result->num_rows > 0) {
+        $failed_count++;
+        $errors[] = "Duplicate holiday for school $school_id: $holiday_name on $holiday_date";
+        continue;
+    }
+    
     $sql = "INSERT INTO TX_SCHOOL_HOLIDAYS (school_id, academic_year, class_id, board_id, holiday_date, holiday_end_date, holiday_name, holiday_type, created_dtm) 
             VALUES ($school_id, '$academic_year', " . ($class_id == 'NULL' ? 'NULL' : $class_id) . ", '$board_id', '$holiday_date', $holiday_end_date, '$holiday_name', '$holiday_type', NOW())";
     
@@ -62,7 +106,7 @@ while (($row = fgetcsv($file)) !== false) {
         $success_count++;
     } else {
         $failed_count++;
-        $errors[] = "Failed to insert: " . $holiday_name;
+        $errors[] = "Failed to insert: " . $holiday_name . " - " . $conn->error;
     }
 }
 
@@ -77,3 +121,4 @@ echo json_encode([
     'message' => "$success_count holidays added, $failed_count failed"
 ]);
 ?>
+<?php

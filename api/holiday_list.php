@@ -42,31 +42,41 @@ if (isset($_GET['board_id']) && !empty($_GET['board_id']) && $_GET['board_id'] !
     $types .= "s";
 }
 
-// Class ID filter (show holidays for specific class OR all classes)
+// Class ID filter
 if (isset($_GET['class_id']) && !empty($_GET['class_id']) && $_GET['class_id'] != '') {
     $where .= " AND (h.class_id = ? OR h.class_id IS NULL)";
     $params[] = intval($_GET['class_id']);
     $types .= "i";
 }
 
+// Get total count
+$count_sql = "SELECT COUNT(*) as total FROM TX_SCHOOL_HOLIDAYS h $where";
+$count_stmt = $conn->prepare($count_sql);
+if (!empty($params)) {
+    $count_stmt->bind_param($types, ...$params);
+}
+$count_stmt->execute();
+$total_rows = $count_stmt->get_result()->fetch_assoc()['total'];
+$count_stmt->close();
+
+// Pagination
+$page = isset($_GET['page']) ? intval($_GET['page']) : 1;
+$limit = isset($_GET['limit']) ? intval($_GET['limit']) : 10;
+$offset = ($page - 1) * $limit;
+$total_pages = ceil($total_rows / $limit);
+
+// Main query
 $sql = "SELECT h.*, s.school_name, s.school_code 
         FROM TX_SCHOOL_HOLIDAYS h 
         LEFT JOIN TX_SCHOOL_DETAILS s ON h.school_id = s.school_id 
         $where 
-        ORDER BY h.holiday_date DESC";
+        ORDER BY h.holiday_date DESC 
+        LIMIT $limit OFFSET $offset";
 
 $stmt = $conn->prepare($sql);
-
-if (!$stmt) {
-    echo json_encode(['success' => false, 'message' => 'Prepare failed: ' . $conn->error, 'sql' => $sql]);
-    $conn->close();
-    exit;
-}
-
 if (!empty($params)) {
     $stmt->bind_param($types, ...$params);
 }
-
 $stmt->execute();
 $result = $stmt->get_result();
 
@@ -75,7 +85,14 @@ while ($row = $result->fetch_assoc()) {
     $holidays[] = $row;
 }
 
-echo json_encode(['success' => true, 'data' => $holidays, 'count' => count($holidays)]);
+echo json_encode([
+    'success' => true,
+    'data' => $holidays,
+    'total_rows' => $total_rows,
+    'total_pages' => $total_pages,
+    'current_page' => $page,
+    'limit' => $limit
+]);
 
 $stmt->close();
 $conn->close();
