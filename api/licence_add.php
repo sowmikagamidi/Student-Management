@@ -1,123 +1,96 @@
 <?php
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST');
+header('Access-Control-Allow-Headers: Content-Type');
+
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+$host = 'localhost';
+$dbname = 'tutorix_db';
+$username = 'root';
+$password = '';
 
 try {
-    $host = 'localhost';
-    $user = 'root';
-    $pass = '';
-    $dbname = 'tutorix_db';
-
-    $conn = new mysqli($host, $user, $pass, $dbname);
-
-    if ($conn->connect_error) {
-        throw new Exception('Database connection failed: ' . $conn->connect_error);
+    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $username, $password);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    
+    $input = json_decode(file_get_contents('php://input'), true);
+    
+    // Log the received data for debugging
+    error_log("Licence Add Request: " . print_r($input, true));
+    
+    if (!$input) {
+        echo json_encode(['success' => false, 'message' => 'Invalid input data']);
+        exit;
     }
-
-    $raw_input = file_get_contents('php://input');
-    $data = json_decode($raw_input, true);
-
-    if (!$data) {
-        throw new Exception('No valid JSON data received');
+    
+    $licence_type = isset($input['licence_type']) ? $input['licence_type'] : '';
+    $school_id = isset($input['school_id']) ? (int)$input['school_id'] : 0;
+    
+    if (!$licence_type || !$school_id) {
+        echo json_encode(['success' => false, 'message' => 'Licence type and school ID are required']);
+        exit;
     }
-
-    $licence_type = isset($data['licence_type']) ? $data['licence_type'] : 'lms';
-
-    // For TV licence
-    if ($licence_type == 'tv') {
-        if (empty($data['school_id']) || empty($data['class_id']) || empty($data['joining_date']) || empty($data['expiry_date'])) {
-            throw new Exception('Missing required fields for TV licence');
+    
+    if ($licence_type === 'tv') {
+        $class_id = isset($input['class_id']) ? (int)$input['class_id'] : 0;
+        $used_status = isset($input['used_status']) ? $input['used_status'] : 'N';
+        $joining_date = isset($input['joining_date']) ? $input['joining_date'] : date('Y-m-d');
+        $expiry_date = isset($input['expiry_date']) ? $input['expiry_date'] : date('Y-m-d', strtotime('+1 year'));
+        $tv_api_key = isset($input['tv_api_key']) ? $input['tv_api_key'] : null;
+        
+        if (!$class_id) {
+            echo json_encode(['success' => false, 'message' => 'Class ID is required for TV licence']);
+            exit;
         }
-
-        $api_key = !empty($data['api_key']) ? $data['api_key'] : 'TPTX-' . date('Y') . '-' . (date('Y') + 1) . '-CL' . str_pad($data['class_id'], 2, '0', STR_PAD_LEFT);
-        $school_id = intval($data['school_id']);
-        $class_id = intval($data['class_id']);
-        $used_status = $conn->real_escape_string($data['used_status'] ?? 'N');
-        $joining_date = $conn->real_escape_string($data['joining_date']);
-        $expiry_date = $conn->real_escape_string($data['expiry_date']);
-
-        $sql = "INSERT INTO TX_SCHOOL_LICENCE (licence_type, school_id, class_id, used_status, joining_date, expiry_date, created_dtm)
-                VALUES ('tv', $school_id, $class_id, '$used_status', '$joining_date', '$expiry_date', NOW())";
-
-        if (!$conn->query($sql)) {
-            throw new Exception('Database error: ' . $conn->error);
-        }
-
-        echo json_encode([
-            'success' => true,
-            'message' => 'TV Licence created successfully',
-            'licence_id' => $conn->insert_id,
-            'api_key' => $api_key
+        
+        $sql = "INSERT INTO tx_school_licence (licence_type, school_id, class_id, used_status, joining_date, expiry_date, tv_api_key, created_dtm) 
+                VALUES (:licence_type, :school_id, :class_id, :used_status, :joining_date, :expiry_date, :tv_api_key, NOW())";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([
+            ':licence_type' => $licence_type,
+            ':school_id' => $school_id,
+            ':class_id' => $class_id,
+            ':used_status' => $used_status,
+            ':joining_date' => $joining_date,
+            ':expiry_date' => $expiry_date,
+            ':tv_api_key' => $tv_api_key
         ]);
-    }
-    // For LMS licence
-    else {
-        if (empty($data['school_id']) || empty($data['class_id']) || empty($data['subscription_type']) || empty($data['subscription_qty']) || empty($data['joining_date']) || empty($data['expiry_date'])) {
-            throw new Exception('Missing required fields for LMS licence');
-        }
-
-        $school_id = intval($data['school_id']);
-        $class_id = intval($data['class_id']);
-        $batch_id = !empty($data['batch_id']) ? intval($data['batch_id']) : null;
-        $subscription_type = $conn->real_escape_string($data['subscription_type']);
-        $subscription_qty = intval($data['subscription_qty']);
-        $available_qty = !empty($data['available_qty']) ? intval($data['available_qty']) : ($subscription_qty - 1);
-        $joining_date = $conn->real_escape_string($data['joining_date']);
-        $expiry_date = $conn->real_escape_string($data['expiry_date']);
-        $order_id = 'ORD-' . time() . rand(100, 999);
-        $api_key = !empty($data['api_key']) ? $data['api_key'] : 'RATX-' . date('Y') . '-' . (date('Y') + 1) . '-' . str_pad(rand(0, 9999), 4, '0', STR_PAD_LEFT);
-
-        // Financial fields (optional)
-        $currency = !empty($data['currency']) ? $conn->real_escape_string($data['currency']) : 'INR';
-        $amount = !empty($data['amount']) ? floatval($data['amount']) : 0;
-        $discount = !empty($data['discount']) ? floatval($data['discount']) : 0;
-        $paid_amount = !empty($data['paid_amount']) ? floatval($data['paid_amount']) : ($amount - $discount);
-        $payment_method = !empty($data['payment_method']) ? $conn->real_escape_string($data['payment_method']) : 'Razorpay';
-
-        $batch_id_sql = ($batch_id === null) ? 'NULL' : $batch_id;
-
-        // Try with all columns including financial fields
-        $sql = "INSERT INTO TX_SCHOOL_LICENCE (
-            licence_type, school_id, class_id, batch_id, subscription_type, subscription_qty, available_qty,
-            joining_date, expiry_date, order_id, currency, amount, discount, paid_amount, payment_method, created_dtm
-        ) VALUES (
-            'lms', $school_id, $class_id, $batch_id_sql,
-            '$subscription_type', $subscription_qty, $available_qty,
-            '$joining_date', '$expiry_date', '$order_id', '$currency', $amount, $discount, $paid_amount, '$payment_method', NOW()
-        )";
-
-        if (!$conn->query($sql)) {
-            // If financial columns don't exist, try without them
-            $sql = "INSERT INTO TX_SCHOOL_LICENCE (
-                licence_type, school_id, class_id, batch_id, subscription_type, subscription_qty, available_qty,
-                joining_date, expiry_date, order_id, api_key,created_dtm
-            ) VALUES (
-                'lms', $school_id, $class_id, $batch_id_sql,
-                '$subscription_type', $subscription_qty, $available_qty,
-                '$joining_date', '$expiry_date', '$order_id', '$api_key', NOW()
-            )";
-
-            if (!$conn->query($sql)) {
-                throw new Exception('Database error: ' . $conn->error);
-            }
-        }
-
-        echo json_encode([
-            'success' => true,
-            'message' => 'LMS Licence created successfully',
-            'licence_id' => $conn->insert_id,
-            'order_id' => $order_id,
-            'api_key' => $api_key
+        
+        echo json_encode(['success' => true, 'message' => 'TV licence created successfully', 'licence_id' => $pdo->lastInsertId()]);
+        
+    } else if ($licence_type === 'lms') {
+        $class_id = isset($input['class_id']) ? (int)$input['class_id'] : 0;
+        $batch_id = isset($input['batch_id']) ? (int)$input['batch_id'] : null;
+        $subscription_type = isset($input['subscription_type']) ? $input['subscription_type'] : 'D';
+        $subscription_qty = isset($input['subscription_qty']) ? (int)$input['subscription_qty'] : 1;
+        $available_qty = isset($input['available_qty']) ? (int)$input['available_qty'] : $subscription_qty - 1;
+        $joining_date = isset($input['joining_date']) ? $input['joining_date'] : date('Y-m-d');
+        $expiry_date = isset($input['expiry_date']) ? $input['expiry_date'] : date('Y-m-d', strtotime('+1 year'));
+        
+        $sql = "INSERT INTO tx_school_licence (licence_type, school_id, class_id, batch_id, subscription_type, subscription_qty, available_qty, joining_date, expiry_date, created_dtm) 
+                VALUES (:licence_type, :school_id, :class_id, :batch_id, :subscription_type, :subscription_qty, :available_qty, :joining_date, :expiry_date, NOW())";
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([
+            ':licence_type' => $licence_type,
+            ':school_id' => $school_id,
+            ':class_id' => $class_id,
+            ':batch_id' => $batch_id,
+            ':subscription_type' => $subscription_type,
+            ':subscription_qty' => $subscription_qty,
+            ':available_qty' => $available_qty,
+            ':joining_date' => $joining_date,
+            ':expiry_date' => $expiry_date
         ]);
+        
+        echo json_encode(['success' => true, 'message' => 'LMS licence created successfully', 'licence_id' => $pdo->lastInsertId()]);
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Invalid licence type']);
     }
-
-    $conn->close();
-
-} catch (Exception $e) {
-    http_response_code(400);
-    echo json_encode([
-        'success' => false,
-        'message' => $e->getMessage()
-    ]);
+    
+} catch(PDOException $e) {
+    echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
 }
 ?>

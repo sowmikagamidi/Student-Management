@@ -422,6 +422,10 @@ ini_set('display_errors', 1);
                     <span class="icon">💰</span>
                     <span>School Fee Structure</span>
                 </a>
+                <a href="student_fee_details.php" class="nav-item ">
+                    <span class="icon">👨‍🎓</span>
+                    <span>Student Fee Details</span>
+                </a>
             </div>
         </div>
         

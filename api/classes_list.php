@@ -1,34 +1,58 @@
 <?php
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: GET');
+
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
 
 $host = 'localhost';
-$user = 'root';
-$pass = '';
 $dbname = 'tutorix_db';
+$username = 'root';
+$password = '';
 
-$conn = new mysqli($host, $user, $pass, $dbname);
-if ($conn->connect_error) {
-    echo json_encode(['success' => false, 'message' => 'Connection failed']);
-    exit;
-}
-
-$school_id = $_GET['school_id'] ?? 0;
-$sql = "SELECT batch_id, class_id, class_name, section, academic_year, board_id 
-        FROM TX_CLASS_BATCHES 
-        WHERE school_id = $school_id 
-        ORDER BY class_id, section";
-
-$result = $conn->query($sql);
-$classes = [];
-
-if ($result && $result->num_rows > 0) {
-    while ($row = $result->fetch_assoc()) {
-        $row['class_name'] = $row['class_name'] ?: 'Class ' . $row['class_id'];
-        $classes[] = $row;
+try {
+    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $username, $password);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    
+    $school_id = isset($_GET['school_id']) ? (int)$_GET['school_id'] : 0;
+    
+    $sql = "SELECT batch_id, school_id, class_id, section, board_id, academic_year, class_name, student_count, created_dtm 
+            FROM tx_class_batches 
+            WHERE 1=1";
+    
+    if ($school_id > 0) {
+        $sql .= " AND school_id = :school_id";
     }
+    $sql .= " ORDER BY class_id, section";
+    
+    $stmt = $pdo->prepare($sql);
+    if ($school_id > 0) {
+        $stmt->execute([':school_id' => $school_id]);
+    } else {
+        $stmt->execute();
+    }
+    
+    $data = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    // Format the response
+    $formattedData = [];
+    foreach ($data as $row) {
+        $formattedData[] = [
+            'batch_id' => $row['batch_id'],
+            'class_id' => $row['class_id'],
+            'section' => $row['section'],
+            'board_id' => $row['board_id'],
+            'academic_year' => $row['academic_year'],
+            'class_name' => $row['class_name'],
+            'student_count' => $row['student_count'],
+            'created_dtm' => $row['created_dtm']
+        ];
+    }
+    
+    echo json_encode(['success' => true, 'data' => $formattedData]);
+    
+} catch(PDOException $e) {
+    echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage(), 'data' => []]);
 }
-
-echo json_encode(['success' => true, 'data' => $classes]);
-$conn->close();
 ?>

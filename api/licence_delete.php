@@ -1,45 +1,46 @@
 <?php
 header('Content-Type: application/json');
 header('Access-Control-Allow-Origin: *');
+header('Access-Control-Allow-Methods: POST');
+header('Access-Control-Allow-Headers: Content-Type');
+
+error_reporting(E_ALL);
+ini_set('display_errors', 1);
+
+$host = 'localhost';
+$dbname = 'tutorix_db';
+$username = 'root';
+$password = '';
 
 try {
-    $host = 'localhost';
-    $user = 'root';
-    $pass = '';
-    $dbname = 'tutorix_db';
-
-    $conn = new mysqli($host, $user, $pass, $dbname);
-
-    if ($conn->connect_error) {
-        throw new Exception('Database connection failed: ' . $conn->connect_error);
+    $pdo = new PDO("mysql:host=$host;dbname=$dbname;charset=utf8", $username, $password);
+    $pdo->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_EXCEPTION);
+    
+    $input = json_decode(file_get_contents('php://input'), true);
+    
+    // Log the received data for debugging
+    error_log("Licence Delete Request: " . print_r($input, true));
+    
+    // Check for licence_id in the request
+    $licence_id = isset($input['licence_id']) ? (int)$input['licence_id'] : 0;
+    
+    if (!$licence_id) {
+        echo json_encode(['success' => false, 'message' => 'Licence ID is required']);
+        exit;
     }
-
-    $data = json_decode(file_get_contents('php://input'), true);
-
-    if (!$data || empty($data['licence_id'])) {
-        throw new Exception('Invalid data or missing licence_id');
+    
+    // Soft delete - update is_deleted flag
+    $sql = "UPDATE tx_school_licence SET is_deleted = 1 WHERE licence_id = :licence_id";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute([':licence_id' => $licence_id]);
+    
+    if ($stmt->rowCount() > 0) {
+        echo json_encode(['success' => true, 'message' => 'Licence deleted successfully']);
+    } else {
+        echo json_encode(['success' => false, 'message' => 'Licence not found or already deleted']);
     }
-
-    $licence_id = intval($data['licence_id']);
-
-    // Check if licence exists
-    $result = $conn->query("SELECT licence_id FROM TX_SCHOOL_LICENCE WHERE licence_id = $licence_id");
-    if (!$result || $result->num_rows === 0) {
-        throw new Exception('Licence not found');
-    }
-
-    // Soft delete - mark as deleted
-    $sql = "UPDATE TX_SCHOOL_LICENCE SET is_deleted = 1, updated_dtm = NOW() WHERE licence_id = $licence_id";
-
-    if (!$conn->query($sql)) {
-        throw new Exception('Database error: ' . $conn->error);
-    }
-
-    echo json_encode(['success' => true, 'message' => 'Licence deleted successfully']);
-    $conn->close();
-
-} catch (Exception $e) {
-    http_response_code(400);
-    echo json_encode(['success' => false, 'message' => $e->getMessage()]);
+    
+} catch(PDOException $e) {
+    echo json_encode(['success' => false, 'message' => 'Database error: ' . $e->getMessage()]);
 }
 ?>

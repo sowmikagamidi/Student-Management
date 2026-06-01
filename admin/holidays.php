@@ -286,6 +286,10 @@ ini_set('display_errors', 1);
                     <span class="icon">💰</span>
                     <span>School Fee Structure</span>
                 </a>
+                <a href="student_fee_details.php" class="nav-item ">
+                    <span class="icon">👨‍🎓</span>
+                    <span>Student Fee Details</span>
+                </a>
             </div>
         </div>
         
@@ -495,7 +499,7 @@ ini_set('display_errors', 1);
                                 <td>${dateDisplay}</td>
                                 <td>${typeBadge}</td>
                                 <td class="action-buttons">
-                                    <button class="btn btn-secondary" onclick="editHoliday(${holiday.id})" style="background:#ffc107; color:#333;">✏️ Edit</button>
+                                    <button class="btn btn-secondary" onclick="editHoliday(${holiday.id})" style="background:#6c757d; color:white;">✏️ Edit</button>
                                     <button class="btn btn-secondary" onclick="deleteHoliday(${holiday.id})" style="background:#dc3545; color:white;">🗑️ Delete</button>
                                 </td>
                             </tr>
