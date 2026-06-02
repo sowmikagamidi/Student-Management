@@ -1902,81 +1902,186 @@ ini_set('log_errors', 1);
                 }, 100);
             };
             
-            window.processPayment = async function(termName, amount) {
-                const paymentMethod = document.getElementById('payment_method_select')?.value || 'cash';
-                const transactionId = document.getElementById('transaction_id_input')?.value || null;
+            // Updated processPayment function - All non-cash payments go through Razorpay
+window.processPayment = async function(termName, amount) {
+    const paymentMethod = document.getElementById('payment_method_select')?.value || 'cash';
+    const transactionId = document.getElementById('transaction_id_input')?.value || null;
+    
+    const confirmResult = await Swal.fire({
+        title: 'Confirm Payment',
+        html: `
+            <div style="text-align: left;">
+                <p><strong>Term:</strong> ${escapeHtml(termName)}</p>
+                <p><strong>Amount:</strong> ₹${amount.toLocaleString('en-IN')}</p>
+                <p><strong>Payment Method:</strong> ${paymentMethod.toUpperCase()}</p>
+                ${transactionId ? `<p><strong>Reference ID:</strong> ${escapeHtml(transactionId)}</p>` : ''}
+                ${paymentMethod !== 'cash' ? '<p><strong>Note:</strong> You will be redirected to Razorpay secure payment gateway</p>' : ''}
+            </div>
+        `,
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#28a745',
+        cancelButtonColor: '#dc3545',
+        confirmButtonText: paymentMethod === 'cash' ? 'Yes, Confirm Cash Payment' : 'Proceed to Online Payment',
+        cancelButtonText: 'Cancel'
+    });
+    
+    if (!confirmResult.isConfirmed) {
+        return;
+    }
+    
+    // Only cash payments are recorded directly
+    if (paymentMethod === 'cash') {
+        await processCashPayment(termName, amount);
+    } else {
+        // ALL other payment methods (card, bank_transfer, online) go through Razorpay
+        await processRazorpayPayment(termName, amount, paymentMethod, transactionId);
+    }
+};
+
+// Updated Razorpay payment function to accept payment method
+async function processRazorpayPayment(termName, amount, paymentMethod, transactionId) {
+    Swal.fire({
+        title: 'Creating Order...',
+        text: 'Please wait while we prepare your secure payment.',
+        allowOutsideClick: false,
+        didOpen: () => {
+            Swal.showLoading();
+        }
+    });
+    
+    try {
+        const orderRes = await fetch(API_BASE + 'create_razorpay_order.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                student_id: currentStudentId,
+                term_name: termName,
+                amount: amount,
+                payment_method: paymentMethod,
+                transaction_id: transactionId
+            })
+        });
+        const orderData = await orderRes.json();
+        
+        if (!orderData.success) {
+            Swal.fire({ icon: 'error', title: 'Error', text: orderData.message });
+            return;
+        }
+        
+        Swal.close();
+        
+        // Your Razorpay Test Keys
+        const RAZORPAY_KEY_ID = 'rzp_test_SwJ0242iPOlpXS';
+        
+        const options = {
+            key: RAZORPAY_KEY_ID,
+            amount: orderData.amount,
+            currency: orderData.currency,
+            name: 'Tutorix',
+            description: `Payment for ${termName} via ${paymentMethod.toUpperCase()}`,
+            order_id: orderData.order_id,
+            handler: async function(response) {
+                Swal.fire({ title: 'Verifying Payment...', allowOutsideClick: false, didOpen: () => Swal.showLoading() });
                 
-                const confirmResult = await Swal.fire({
-                    title: 'Confirm Payment',
-                    html: `
-                        <div style="text-align: left;">
-                            <p><strong>Term:</strong> ${escapeHtml(termName)}</p>
-                            <p><strong>Amount:</strong> ₹${amount.toLocaleString('en-IN')}</p>
-                            <p><strong>Payment Method:</strong> ${paymentMethod.toUpperCase()}</p>
-                            ${transactionId ? `<p><strong>Transaction ID:</strong> ${escapeHtml(transactionId)}</p>` : ''}
-                        </div>
-                    `,
-                    icon: 'question',
-                    showCancelButton: true,
-                    confirmButtonColor: '#28a745',
-                    cancelButtonColor: '#dc3545',
-                    confirmButtonText: 'Yes, Confirm Payment',
-                    cancelButtonText: 'Cancel'
+                const verifyRes = await fetch(API_BASE + 'verify_razorpay_payment.php', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        order_id: response.razorpay_order_id,
+                        payment_id: response.razorpay_payment_id,
+                        signature: response.razorpay_signature,
+                        student_id: currentStudentId,
+                        term_name: termName,
+                        amount: amount,
+                        payment_method: paymentMethod,
+                        transaction_id: transactionId
+                    })
                 });
+                const verifyData = await verifyRes.json();
                 
-                if (!confirmResult.isConfirmed) {
-                    return;
-                }
-                
-                if (paymentMethod === 'cash') {
-                    await processCashPayment(termName, amount);
-                } else if (paymentMethod === 'online') {
-                    await processRazorpayPayment(termName, amount);
+                if (verifyData.success) {
+                    Swal.fire({ icon: 'success', title: 'Payment Successful!', text: `Your ${paymentMethod.toUpperCase()} payment has been recorded.` });
+                    closePanel();
+                    await loadTermsData();
+                    await loadTermPaymentStatus();
+                    const viewContent = await loadViewMode();
+                    const editContent = await loadEditMode();
+                    document.getElementById('termViewContent').innerHTML = editContent;
+                    loadStudentFeeDetails(currentPage);
                 } else {
-                    Swal.fire({ 
-                        title: 'Recording Payment...', 
-                        allowOutsideClick: false, 
-                        didOpen: () => Swal.showLoading() 
-                    });
-                    
-                    try {
-                        const paymentRes = await fetch(API_BASE + 'record_term_payment.php', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                                student_id: currentStudentId,
-                                term_name: termName,
-                                amount: amount,
-                                payment_method: paymentMethod,
-                                transaction_id: transactionId || 'TXN_' + Date.now()
-                            })
-                        });
-                        const paymentData = await paymentRes.json();
-                        
-                        if (paymentData.success) {
-                            Swal.fire({ 
-                                icon: 'success', 
-                                title: 'Payment Successful!', 
-                                text: `Payment of ₹${amount.toLocaleString('en-IN')} has been recorded successfully.` 
-                            });
-                            
-                            closePanel();
-                            
-                            await loadTermsData();
-                            await loadTermPaymentStatus();
-                            const viewContent = await loadViewMode();
-                            const editContent = await loadEditMode();
-                            document.getElementById('termViewContent').innerHTML = editContent;
-                            loadStudentFeeDetails(currentPage);
-                        } else {
-                            Swal.fire({ icon: 'error', title: 'Payment Failed', text: paymentData.message });
-                        }
-                    } catch(error) {
-                        console.error('Payment error:', error);
-                        Swal.fire({ icon: 'error', title: 'Error', text: 'Something went wrong. Please try again.' });
-                    }
+                    Swal.fire({ icon: 'error', title: 'Payment Failed', text: verifyData.message });
                 }
-            };
+            },
+            prefill: {
+                name: orderData.student_name,
+                email: orderData.student_email,
+                contact: orderData.student_mobile
+            },
+            theme: {
+                color: '#4361ee'
+            },
+            modal: {
+                ondismiss: function() {
+                    Swal.fire('Payment cancelled', 'You cancelled the payment process', 'info');
+                }
+            }
+        };
+        
+        const razorpay = new Razorpay(options);
+        razorpay.open();
+        
+    } catch (error) {
+        console.error('Payment error:', error);
+        Swal.fire({ icon: 'error', title: 'Error', text: 'Something went wrong. Please try again.' });
+    }
+}
+
+// Cash payment remains direct
+async function processCashPayment(termName, amount) {
+    Swal.fire({ 
+        title: 'Recording Cash Payment...', 
+        allowOutsideClick: false, 
+        didOpen: () => Swal.showLoading() 
+    });
+    
+    try {
+        const paymentRes = await fetch(API_BASE + 'record_term_payment.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                student_id: currentStudentId,
+                term_name: termName,
+                amount: amount,
+                payment_method: 'cash',
+                transaction_id: 'CASH_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6)
+            })
+        });
+        const paymentData = await paymentRes.json();
+        
+        if (paymentData.success) {
+            Swal.fire({ 
+                icon: 'success', 
+                title: 'Payment Successful!', 
+                text: `Cash payment of ₹${amount.toLocaleString('en-IN')} has been recorded successfully.` 
+            });
+            
+            closePanel();
+            
+            await loadTermsData();
+            await loadTermPaymentStatus();
+            const viewContent = await loadViewMode();
+            const editContent = await loadEditMode();
+            document.getElementById('termViewContent').innerHTML = editContent;
+            loadStudentFeeDetails(currentPage);
+        } else {
+            Swal.fire({ icon: 'error', title: 'Payment Failed', text: paymentData.message });
+        }
+    } catch(error) {
+        console.error('Payment error:', error);
+        Swal.fire({ icon: 'error', title: 'Error', text: 'Something went wrong. Please try again.' });
+    }
+}
             
             window.showCreateTermFormHandler = function() {
                 const remainingBalance = getRemainingBalance();
