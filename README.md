@@ -5,17 +5,20 @@ teachers, classes, attendance, and related academic activities through a simple 
 
 -->  Features:--
 
-Student Registration and Management
-Teacher Management
-Class and Subject Management
-Attendance Tracking
-User Authentication and Login System
-Dashboard with Statistics
-CRUD Operations (Create, Read, Update, Delete)
-Responsive User Interface
-API Integration Support
-Database Connectivity with MySQL
-Technologies Used
+Student Registration and Management, 
+Teacher Management, 
+Class and Subject Management, 
+Attendance Tracking, 
+User Authentication and Login System, 
+Dashboard with Statistics, 
+CRUD Operations (Create, Read, Update, Delete), 
+Responsive User Interface, 
+API Integration Support, 
+Database Connectivity with MySQL. 
+
+
+
+Technologies Used:--
 Frontend: HTML, CSS, JavaScript, Bootstrap
 Backend: PHP
 Database: MySQL
