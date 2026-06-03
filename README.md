@@ -35,7 +35,8 @@ Version Control: Git & GitHub
 
 -->  Project Structure:
 school_management/
-│
+|
+│__ admin/
 ├── api/
 ├── assets/
 ├── config/
